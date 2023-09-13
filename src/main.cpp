@@ -20,6 +20,12 @@ namespace swp = sw::print;
 
 namespace strange_whiskers::arguments
 {
+    struct program_options_return
+    {
+        bool requestedHelp;
+        po::variables_map vm;
+    };
+
     bool HandleHelpOption(int argc, po::variables_map &vm, po::options_description &desc)
     {
         if (argc == 1 || vm.count("help"))
@@ -32,17 +38,19 @@ namespace strange_whiskers::arguments
         return false;
     }
 
-
-    bool HandleProgramOptions(int argc, char **argv)
+    program_options_return HandleProgramOptions(int argc, char **argv)
     {
+        program_options_return result;
+        result.requestedHelp = false;
         po::options_description desc("Allowed options");
-        desc.add_options()
-        ("help,h", "produce help message")
+        desc.add_options()("help,h", "produce help message")
+        ("filesToHide,f", po::value<string>(), "files to hide in the folders")
         ("baseFolder,p", po::value<string>()->default_value("."), "path of base folder")
-        ("maxFolders,m", po::value<int>()->default_value(63), "set number of folders to create")
-        ("depth,d", po::value<int>()->default_value(5), "set number of files to create")
-        ("branchCount,b", po::value<int>()->default_value(2), "the number of branches to create at each node must be greater than 1.")
-        ("branchCountRandomization,r", po::value<bool>()->default_value(false), "weather or not the number of branches should be randomized (always at least two)");
+        ("maxFolders,m", po::value<int>()->default_value(200000), "set number of folders to create")
+        ("depth,d", po::value<int>()->default_value(10), "set number of files to create")
+        ("branchCount,b", po::value<int>()->default_value(3), "the number of branches to create at each node must be greater than 1.")
+        ("branchCountRandomization,r", po::value<bool>()->default_value(false), "Whether or not the number of branches should be randomized (always at least two)");
+
         po::positional_options_description p;
         p.add("baseFolder", 1);
         po::variables_map vm;
@@ -50,24 +58,38 @@ namespace strange_whiskers::arguments
         po::notify(vm);
 
         if (HandleHelpOption(argc, vm, desc))
-            return true;
-
-        
+            return result;
+        result.vm = vm;
+        return result;
     }
 }
-    int main(int argc, char **argv)
-    {
-        return sw::arguments::HandleProgramOptions(argc, argv);
-        string baseFolderName = "baseFolder";
 
-        fs::path baseFolder = swfs::CreateBaseFolder(baseFolderName);
-        swfs::FolderCreationSpec spec{10, 3, 200000};
 
-        // Initialize the randomiser
-        swr::Initialize();
 
-        swp::Println(std::to_string(CreateFoldersRecursively(baseFolder, spec)));
+int main(int argc, char **argv)
+{
+    auto options = sw::arguments::HandleProgramOptions(argc, argv);
+    auto baseFolderName = options.vm["baseFolder"].as<string>();
+    auto maxDepth = options.vm["depth"].as<int>();
+    auto maxSubFolders = options.vm["branchCount"].as<int>();
+    auto maxFolders = options.vm["maxFolders"].as<int>();
 
-        return 0;
-    }
 
+
+    fs::path baseFolder = swfs::CreateBaseFolder(baseFolderName);
+    swfs::FolderCreationSpec spec{10, 3, 200000};
+
+    // Initialize the randomiser
+    swr::Initialize();
+
+    int createdFolderCount = CreateFoldersRecursively(baseFolder, spec);
+
+    // Create the folders
+    swp::Println(std::to_string(createdFolderCount));
+
+    // Spread the files
+    auto filesToHide = options.vm["filesToHide"].as<string>();
+    strange_whiskers::folder_spam::SpreadFiles(createdFolderCount, filesToHide, baseFolderName);
+
+    return 0;
+}
