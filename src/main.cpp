@@ -1,7 +1,6 @@
 #include <filesystem>
 #include <string>
 #include <iostream>
-#include <map>
 #include <boost/program_options.hpp>
 
 #include "random/random.hpp"
@@ -44,7 +43,13 @@ namespace strange_whiskers::arguments
         program_options_return result;
         result.requestedHelp = false;
         po::options_description desc("Allowed options");
-        desc.add_options()("help,h", "produce help message")("filesToHide,f", po::value<string>(), "files to hide in the folders")("baseFolder,p", po::value<string>()->default_value("."), "path of base folder")("maxFolders,m", po::value<int>()->default_value(63), "set number of folders to create")("depth,d", po::value<int>()->default_value(5), "set number of files to create")("branchCount,b", po::value<int>()->default_value(2), "the number of branches to create at each node must be greater than 1.")("branchCountRandomization,r", po::value<bool>()->default_value(false), "weather or not the number of branches should be randomized (always at least two)");
+        desc.add_options()("help,h", "produce help message")
+        ("filesToHide,f", po::value<string>(), "files to hide in the folders")
+        ("baseFolder,p", po::value<string>()->default_value("."), "path of base folder")
+        ("maxFolders,m", po::value<int>()->default_value(200000), "set number of folders to create")
+        ("depth,d", po::value<int>()->default_value(10), "set number of files to create")
+        ("branchCount,b", po::value<int>()->default_value(3), "the number of branches to create at each node must be greater than 1.")
+        ("branchCountRandomization,r", po::value<bool>()->default_value(false), "Whether or not the number of branches should be randomized (always at least two)");
 
         po::positional_options_description p;
         p.add("baseFolder", 1);
@@ -59,30 +64,17 @@ namespace strange_whiskers::arguments
     }
 }
 
-void SpreadFiles(int foldercount, string &filesToHide, string &fileLocation)
-{
-    // Find number of files to hide
-    int count = std::distance(fs::directory_iterator{fs::path{filesToHide}}, fs::directory_iterator());
-    // Get the numbers for the folders to hide files in and assign them to a vector with the files to hide
-    std::map<int, fs::path> folderNumberToPath{};
-    for (auto const &entry : fs::directory_iterator{fs::path{filesToHide}})
-    {
-        auto fileindex = swr::GetBoundedRandomInteger(foldercount / 1000, foldercount);
-        folderNumberToPath[fileindex] = entry.path();
-    }
-    for (auto const &entry : fs::recursive_directory_iterator{fs::path{fileLocation}})
-    {
-        entry.path().
-        fs::copy(entry.path, fs::path{fileLocation});
-    }
-    // Iterate the big folder tree and place files based on the created vector
-    fs::recursive_directory_iterator dir_itr = fs::recursive_directory_iterator(".");
-}
+
 
 int main(int argc, char **argv)
 {
-    sw::arguments::HandleProgramOptions(argc, argv);
-    string baseFolderName = "baseFolder";
+    auto options = sw::arguments::HandleProgramOptions(argc, argv);
+    auto baseFolderName = options.vm["baseFolder"].as<string>();
+    auto maxDepth = options.vm["depth"].as<int>();
+    auto maxSubFolders = options.vm["branchCount"].as<int>();
+    auto maxFolders = options.vm["maxFolders"].as<int>();
+
+
 
     fs::path baseFolder = swfs::CreateBaseFolder(baseFolderName);
     swfs::FolderCreationSpec spec{10, 3, 200000};
@@ -90,8 +82,14 @@ int main(int argc, char **argv)
     // Initialize the randomiser
     swr::Initialize();
 
+    int createdFolderCount = CreateFoldersRecursively(baseFolder, spec);
+
     // Create the folders
-    swp::Println(std::to_string(CreateFoldersRecursively(baseFolder, spec)));
+    swp::Println(std::to_string(createdFolderCount));
+
+    // Spread the files
+    auto filesToHide = options.vm["filesToHide"].as<string>();
+    strange_whiskers::folder_spam::SpreadFiles(createdFolderCount, filesToHide, baseFolderName);
 
     return 0;
 }

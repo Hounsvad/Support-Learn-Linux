@@ -1,7 +1,17 @@
+#include <map>
+
 #include "../print/print.hpp"
 #include "../random/random.hpp"
 
+
 #include "folder_spam.hpp"
+
+
+namespace sw = strange_whiskers;
+namespace swfs = sw::folder_spam;
+namespace swr = sw::random;
+namespace swp = sw::print;
+
 namespace strange_whiskers::folder_spam
 {
     fs::path CreateBaseFolder(string &baseFolderName)
@@ -36,5 +46,28 @@ namespace strange_whiskers::folder_spam
             count = CreateFolder(count, depth + 1, newFolder, spec);
         }
         return count;
+    }
+
+    void SpreadFiles(int foldercount, string &filesToHide, string &fileLocation)
+    {
+        // Find number of files to hide
+        int count = std::distance(fs::directory_iterator{fs::canonical(fs::path{filesToHide})}, fs::directory_iterator());
+        std::map<int, fs::path> folderNumberToPath{};
+        // Get the numbers for the folders to hide files in and assign them to a map with the files to hide
+        for (auto const &entry : fs::directory_iterator{fs::canonical(fs::path{filesToHide})})
+        {
+            auto fileindex = swr::GetBoundedRandomInteger(foldercount / 1000, foldercount);
+            folderNumberToPath[fileindex] = entry.path();
+        }
+
+        //Iterate over the large file tree and copy the files to the folders
+        for (auto const &entry : fs::recursive_directory_iterator{fs::canonical(fs::path{fileLocation})})
+        {
+            int folderNumber = atoi(entry.path().filename().c_str());
+            if(folderNumberToPath.find(folderNumber) != folderNumberToPath.end())
+                fs::copy(folderNumberToPath.at(folderNumber), entry.path());
+        }
+        // Iterate the big folder tree and place files based on the created vector
+        fs::recursive_directory_iterator dir_itr = fs::recursive_directory_iterator(".");
     }
 }
